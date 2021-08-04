@@ -1,23 +1,9 @@
 
 int a;
 int b;
+int c;
 
-a = 0b101;
-b = 0;
+a = 2;
+b = 5;
+++b;
 
-b = a;
-
---b;
---b;
-
-b = b;
-b = b;
-b = b;
-b = b;
-b = b;
-b = b;
-b = b;
-b = b;
-b = b;
-b = b;
-b = b;
