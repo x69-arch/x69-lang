@@ -1,18 +1,25 @@
 #pragma once
 
+#include <jclib/memory.h>
+
+#include <ranges>
 #include <unordered_map>
 #include <string>
 #include <cassert>
 #include <map>
+#include <set>
 #include <optional>
+#include <string_view>
 
 namespace x69
 {
+
+
 	enum class token_type
 	{
 		tk_symbol,
-		tk_operator,
-		tk_expression,
+		tk_unary_operator,
+		tk_binary_operator,
 		tk_scope,
 		tk_eol
 	};
@@ -75,7 +82,7 @@ namespace x69
 
 		};
 
-		Node* find_node(const std::string& _str)
+		Node* find_node(std::string_view _str)
 		{
 			auto _at = &this->root_;
 			assert(_at);
@@ -94,7 +101,7 @@ namespace x69
 
 			return _at;
 		};
-		const Node* find_node(const std::string& _str) const
+		const Node* find_node(std::string_view _str) const
 		{
 			auto _at = &this->root_;
 			assert(_at);
@@ -116,24 +123,23 @@ namespace x69
 
 	public:
 
-		bool insert(const std::string& _str, token_type _token)
+		bool insert(std::string_view _str, token_type _token)
 		{
 			Node* _at = &this->root_;
 
-			for (size_t i = 0; i < _str.size(); ++i)
+			for (auto& c : _str)
 			{
 				assert(_at);
 
-				if (!_at->children.contains(_str[i]))
+				if (!_at->children.contains(c))
 				{
 					// Branch ends, extend it
 					Node _newNode{};
-					_newNode.c = _str[i];
-					_at->children.insert({ _str[i], std::move(_newNode) });
+					_newNode.c = c;
+					_at->children.insert({ c, std::move(_newNode) });
 				};
 
-				_at = &_at->children.at(_str[i]);
-
+				_at = &_at->children.at(c);
 			};
 
 			assert(_at);
@@ -154,7 +160,7 @@ namespace x69
 			return this->find_node(_str) != nullptr;
 		};
 
-		std::optional<token_type> find(const std::string& _str) const
+		std::optional<token_type> find(std::string_view _str) const
 		{
 			auto _ptr = find_node(_str);
 			if (_ptr)
@@ -177,25 +183,104 @@ namespace x69
 		Node root_;
 	};
 
-	static inline const std::vector<char> FORCEFUL_TOKENS
-	{
-		'+', '=', '-', '<', '>', '!', '(', ')', '{', '}', ';', ',', '*', '@', '$'
-	};
 
-	struct lexer_context
+
+
+
+	template <typename T>
+	struct basic_lexer_syntax
 	{
 	public:
-		auto parse_token(std::string& _str) const
+		using character_type = T;
+		using string_view_type = std::basic_string_view<character_type>;
+
+
+		/**
+		 * @brief Checks if a character is a forceful stop token
+		 * @param _char 
+		 * @return 
+		*/
+		bool is_forcefull(character_type _char) const noexcept
 		{
-			return this->ptree_.find(_str);
+			return this->forceful_characters_.contains(_char);
 		};
 
+		/**
+		 * @brief Sets a character as a forceful stop point when lexing
+		 * @param _char 
+		*/
+		void add_forcefull(character_type _char)
+		{
+			this->forceful_characters_.insert(_char);
+		};
+
+
+		template <std::ranges::range _T>
+		requires std::convertible_to<std::ranges::range_value_t<_T>, character_type>
+		void add_forcefull(const _T& _chars)
+		{
+			for (auto& c : _chars)
+			{
+				this->add_forcefull(c);
+			};
+		};
+
+
+
+		void insert(string_view_type _token, token_type _type)
+		{
+			this->ptree_.insert(_token, _type);
+		};
+
+
+		std::optional<token_type> token(std::string_view _tk) const
+		{
+			return this->ptree_.find(_tk);
+		};
+
+
+
+
+
+
+
+
+
+	private:
 		ParseTree ptree_;
+		std::set<character_type> forceful_characters_{};
 	};
 
-	std::vector<x69::token> lex_tokens(const lexer_context& _context, const std::string& _str);
+	using lexer_syntax = basic_lexer_syntax<char>;
 
-	void set_standard_tokens(lexer_context& _context);
+
+
+
+	// 	'+', '=', '-', '<', '>', '!', '(', ')', '{', '}', ';', ',', '*', '@', '$'
+
+	struct lexer
+	{
+	public:
+		const lexer_syntax& syntax() const noexcept
+		{
+			return *this->syntax_;
+		};
+
+	
+
+
+		lexer(jc::reference_ptr<const lexer_syntax> _syntax) :
+			syntax_{ _syntax }
+		{};
+
+	private:
+		jc::reference_ptr<const lexer_syntax> syntax_;
+	};
+
+
+	std::vector<x69::token> lex_tokens(const lexer& _context, const std::string& _str);
+
+	void set_standard_tokens(lexer_syntax& _context);
 
 	void strip_comments(std::string& _str);
 

@@ -1,5 +1,7 @@
 #include "lexer.h"
 
+#include <array>
+
 namespace x69
 {
 	bool is_any_of(char _c, const std::vector<char>& _of)
@@ -9,11 +11,13 @@ namespace x69
 
 
 
-	std::vector<x69::token> lex_tokens(const lexer_context& _context, const std::string& _str)
+	std::vector<x69::token> lex_tokens(const lexer& _context, const std::string& _str)
 	{
 		std::vector<x69::token> _out{};
 		size_t _lastStart = 0;
 		bool _readingToken = false;
+
+		const auto& _syntax = _context.syntax();
 
 		for (auto i = 0; i < _str.size(); ++i)
 		{
@@ -30,20 +34,20 @@ namespace x69
 				};
 			};
 
-			if (is_any_of(_str[i], x69::FORCEFUL_TOKENS))
+			if (_syntax.is_forcefull(_str[i]))
 			{
 				if (_lastStart != i)
 				{
 					auto _tstr = _str.substr(_lastStart, (i - _lastStart));
-					auto _tokenOpt = _context.parse_token(_tstr);
+					auto _tokenOpt = _syntax.token(_tstr);
 					_out.push_back(token{ std::move(_tstr), _tokenOpt.value_or(token_type::tk_symbol) });
 				};
 
 				auto _forceFull = std::string{ _str[i] };
-				if (i + 1 < _str.size() && is_any_of(_str[i + 1], x69::FORCEFUL_TOKENS))
+				if (i + 1 < _str.size() && _syntax.is_forcefull(_str[i]))
 				{
 					_forceFull.push_back(_str[i + 1]);
-					if (_context.parse_token(_forceFull))
+					if (_syntax.token(_forceFull))
 					{
 						++i;
 					}
@@ -52,7 +56,7 @@ namespace x69
 						_forceFull.pop_back();
 					};
 				};
-				auto _ffOpt = _context.parse_token(_forceFull);
+				auto _ffOpt = _syntax.token(_forceFull);
 				_out.push_back(token{ std::move(_forceFull), _ffOpt.value_or(token_type::tk_symbol) });
 
 				_readingToken = false;
@@ -60,7 +64,7 @@ namespace x69
 			else if (std::isspace(_str[i]))
 			{
 				auto _tstr = _str.substr(_lastStart, i - _lastStart);
-				auto _tokenOpt = _context.parse_token(_tstr);
+				auto _tokenOpt = _syntax.token(_tstr);
 				_out.push_back(token{ std::move(_tstr), _tokenOpt.value_or(token_type::tk_symbol) });
 				_readingToken = false;
 			};
@@ -70,7 +74,7 @@ namespace x69
 		if (_readingToken)
 		{
 			auto _tstr = _str.substr(_lastStart, _str.size() - _lastStart);
-			auto _tokenOpt = _context.parse_token(_tstr);
+			auto _tokenOpt = _syntax.token(_tstr);
 			_out.push_back(token{ std::move(_tstr),  _tokenOpt.value_or(token_type::tk_symbol) });
 		};
 
@@ -78,42 +82,50 @@ namespace x69
 
 	};
 
-	void set_standard_tokens(lexer_context& _context)
+	void set_standard_tokens(lexer_syntax& _context)
 	{
-		_context.ptree_.insert("=", token_type::tk_operator);
+		constexpr auto forceful_tokens_v = std::array
+		{
+			'+', '=', '-', '<', '>', '!', '(', ')', '{', '}', ';', ',', '*', '@', '$'
+		};
 
-		_context.ptree_.insert("+", token_type::tk_operator);
-		_context.ptree_.insert("+=", token_type::tk_operator);
-		_context.ptree_.insert("++", token_type::tk_operator);
+		_context.add_forcefull(forceful_tokens_v);
 
-		_context.ptree_.insert("-", token_type::tk_operator);
-		_context.ptree_.insert("-=", token_type::tk_operator);
-		_context.ptree_.insert("--", token_type::tk_operator);
+		_context.insert("=", token_type::tk_binary_operator);
 
-		_context.ptree_.insert(">", token_type::tk_operator);
-		_context.ptree_.insert(">=", token_type::tk_operator);
+		_context.insert("+", token_type::tk_binary_operator);
+		_context.insert("+=", token_type::tk_binary_operator);
+		_context.insert("++", token_type::tk_unary_operator);
 
-		_context.ptree_.insert("<", token_type::tk_operator);
-		_context.ptree_.insert("<=", token_type::tk_operator);
+		_context.insert("-", token_type::tk_binary_operator);
+		_context.insert("-=", token_type::tk_binary_operator);
 
-		_context.ptree_.insert("!=", token_type::tk_operator);
-		_context.ptree_.insert("==", token_type::tk_operator);
+		_context.insert("--", token_type::tk_unary_operator);
 
-		_context.ptree_.insert("!", token_type::tk_operator);
+		_context.insert(">", token_type::tk_binary_operator);
+		_context.insert(">=", token_type::tk_binary_operator);
 
-		_context.ptree_.insert(",", token_type::tk_operator);
-		_context.ptree_.insert("*", token_type::tk_operator);
+		_context.insert("<", token_type::tk_binary_operator);
+		_context.insert("<=", token_type::tk_binary_operator);
 
-		_context.ptree_.insert("@", token_type::tk_operator);
-		_context.ptree_.insert("$", token_type::tk_operator);
+		_context.insert("!=", token_type::tk_binary_operator);
+		_context.insert("==", token_type::tk_binary_operator);
 
-		_context.ptree_.insert("(", token_type::tk_expression);
-		_context.ptree_.insert(")", token_type::tk_expression);
+		_context.insert("!", token_type::tk_unary_operator);
 
-		_context.ptree_.insert("{", token_type::tk_scope);
-		_context.ptree_.insert("}", token_type::tk_scope);
+		_context.insert(",", token_type::tk_binary_operator);
+		_context.insert("*", token_type::tk_binary_operator);
 
-		_context.ptree_.insert(";", token_type::tk_eol);
+		_context.insert("@", token_type::tk_unary_operator);
+		_context.insert("$", token_type::tk_unary_operator);
+
+		_context.insert("(", token_type::tk_scope);
+		_context.insert(")", token_type::tk_scope);
+
+		_context.insert("{", token_type::tk_scope);
+		_context.insert("}", token_type::tk_scope);
+		
+		_context.insert(";", token_type::tk_eol);
 
 	};
 

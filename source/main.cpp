@@ -45,6 +45,7 @@ namespace x69
 
 
 
+
 	enum symbol_type
 	{
 		sm_name,
@@ -65,6 +66,48 @@ namespace x69
 	};
 
 	using statement = std::vector<symbol>;
+
+
+
+
+
+
+
+	// 
+	//  (type_name) (name) (assigment) (dont_care)
+	//
+
+	struct statement_pattern
+	{
+		enum arguement_type
+		{
+			sm_name,
+			sm_typename,
+			sm_assignment,
+			sm_literal,
+			sm_unary_op,
+			sm_binary_op
+		};
+
+		struct pattern_arg
+		{
+			
+		};
+
+
+
+
+
+	};
+
+
+
+
+
+
+
+
+
 
 
 
@@ -119,11 +162,13 @@ int main()
 		};
 
 		{
-			x69::lexer_context _context{};
-			x69::set_standard_tokens(_context);
+			x69::lexer_syntax _syntax{};
+			x69::lexer _lexer{ _syntax };
+
+			x69::set_standard_tokens(_syntax);
 
 			x69::strip_comments(_source);
-			_tokens = x69::lex_tokens(_context, _source);
+			_tokens = x69::lex_tokens(_lexer, _source);
 		};
 	};
 
@@ -168,7 +213,8 @@ int main()
 			_statements.back().push_back(x69::symbol{ v, _type, _spec });
 		};
 			break;
-		case tk_operator:
+		case tk_unary_operator: [[fallthrough]];
+		case tk_binary_operator:
 		{
 			using enum x69::symbol_type;
 
