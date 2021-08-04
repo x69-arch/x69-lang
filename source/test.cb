@@ -1,7 +1,13 @@
 
-int a;
-int b;
-int c;
+let int a;
+
+let int b = 5;
+
+/*
+let int b;
+b = 5;
+*/
+
 
 a = 2;
 b = 5;

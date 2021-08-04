@@ -91,7 +91,11 @@ namespace x69
 
 		_context.add_forcefull(forceful_tokens_v);
 
-		_context.insert("=", token_type::tk_binary_operator);
+		_context.insert("let", token_type::tk_declaration);
+
+		_context.insert("=", token_type::tk_assignment);
+
+
 
 		_context.insert("+", token_type::tk_binary_operator);
 		_context.insert("+=", token_type::tk_binary_operator);
@@ -99,7 +103,6 @@ namespace x69
 
 		_context.insert("-", token_type::tk_binary_operator);
 		_context.insert("-=", token_type::tk_binary_operator);
-
 		_context.insert("--", token_type::tk_unary_operator);
 
 		_context.insert(">", token_type::tk_binary_operator);

@@ -18,6 +18,8 @@ namespace x69
 	enum class token_type
 	{
 		tk_symbol,
+		tk_declaration,
+		tk_assignment,
 		tk_unary_operator,
 		tk_binary_operator,
 		tk_scope,

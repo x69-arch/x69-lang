@@ -18,7 +18,6 @@
 
 
 
-
 size_t target_word_size()
 {
 
@@ -45,28 +44,31 @@ namespace x69
 
 
 
-
 	enum symbol_type
 	{
 		sm_name,
+		sm_declaration,
 		sm_typename,
 		sm_assignment,
 		sm_literal,
 		sm_unary_op,
-		sm_binary_op,
-		sm_unary_assignment_op,
-		sm_binary_assignment_op
+		sm_binary_op
 	};
+
+
+
+
 
 	struct symbol
 	{
-		jc::reference_ptr<x69::token> token;
+		jc::reference_ptr<const x69::token> token;
 		symbol_type type;
 		void* spec = nullptr;
 	};
 
-	using statement = std::vector<symbol>;
 
+
+	using statement = std::vector<x69::token>;
 
 
 
@@ -74,30 +76,19 @@ namespace x69
 
 
 	// 
-	//  (type_name) (name) (assigment) (dont_care)
+	//  tk_declaration tk_symbol tk_symbol tk_eol;
+	//  tk_declaration tk_symbol (tk_symbol tk_assignment ...)
 	//
 
-	struct statement_pattern
+	struct token_pattern
 	{
-		enum arguement_type
+		struct arguement
 		{
-			sm_name,
-			sm_typename,
-			sm_assignment,
-			sm_literal,
-			sm_unary_op,
-			sm_binary_op
+			std::optional<token_type> token;
+			bool variadic = false;
 		};
 
-		struct pattern_arg
-		{
-			
-		};
-
-
-
-
-
+		std::vector<arguement> args_;
 	};
 
 
@@ -140,7 +131,85 @@ namespace x69
 
 };
 
+namespace x69
+{
 
+	constexpr auto find_pattern = [](const x69::statement& _st, const x69::token_pattern& _pattern)
+	{
+		auto _ptIter = _pattern.args_.begin();
+		auto _stIter = _st.begin();
+
+		for (; _ptIter != _pattern.args_.end() && _stIter != _st.end(); ++_ptIter, ++_stIter)
+		{
+			if (_ptIter->token)
+			{
+				if (_ptIter->token.value() != _stIter->type())
+				{
+					return false;
+				};
+			}
+			else
+			{
+				if (_ptIter->variadic)
+				{
+					break;
+				};
+			};
+		};
+		return true;
+	};
+	constexpr auto match_pattern = [](const x69::statement& _st, const x69::token_pattern& _pattern)
+	{
+		auto& _args = _pattern.args_;
+		auto _varargIter = std::ranges::find_if(_args, [](const auto& _arg) -> bool
+			{
+				return _arg.variadic;
+			});
+
+		if (_varargIter == std::ranges::end(_args))
+		{
+			return std::ranges::end(_st);
+		};
+
+		const auto _dist = std::distance(std::ranges::begin(_args), _varargIter);
+		if (_dist > _st.size())
+		{
+			return _st.end();
+		};
+		return std::next(_st.begin(), _dist);
+	};
+
+
+
+	auto parse_statement(const statement& _statement, const std::ranges::range auto& _patterns)
+	{
+		auto& st = _statement;
+
+		for (auto& pt : _patterns)
+		{
+			if (find_pattern(st, pt))
+			{
+				const auto _varargIter = match_pattern(st, *pt);
+				for (auto& a : jc::views::iter(st.cbegin(), _varargIter))
+				{
+					if (a.type() != x69::token_type::tk_eol)
+					{
+						cout("{} ", a.str());
+					};
+				};
+				cout("\n");
+
+				if (_varargIter != st.end())
+				{
+					// process varaidic arguements
+
+				};
+			};
+		};
+
+	};
+
+};
 
 int main()
 {
@@ -172,98 +241,81 @@ int main()
 		};
 	};
 
-
-	x69::compiler_context _context{};
-
-	std::vector<x69::statement> _statements{ x69::statement{} };
-	for (auto it = _tokens.begin(); it != _tokens.end(); ++it)
+	std::vector<x69::statement> _statements{};
 	{
-		auto& v = *it;
-
-		using enum x69::token_type;
-		switch (v.type())
+		x69::statement _thisStatement{};
+		for (auto it = _tokens.begin(); it != _tokens.end(); ++it)
 		{
-		case tk_symbol:
-		{
-			x69::symbol_type _type = x69::symbol_type::sm_name;
-
-			auto& _types = _context.types_;
-			auto _typeIter = _types.find(v.str_);
-
-			void* _spec = nullptr;
-
-			if (_typeIter != _types.end())
+			_thisStatement.push_back(*it);
+			if (it->type() == x69::token_type::tk_eol)
 			{
-				_type = x69::symbol_type::sm_typename;
-				_spec = &_typeIter->second;
-			}
-			else
-			{
-				auto _tokenStr = v.str();
-				if (std::isdigit(_tokenStr.front()))
-				{
-					_type = x69::symbol_type::sm_literal;
-				}
-				else
-				{
-					_type = x69::symbol_type::sm_name;
-				};
+				_statements.push_back(_thisStatement);
+				_thisStatement.clear();
 			};
-
-			_statements.back().push_back(x69::symbol{ v, _type, _spec });
 		};
-			break;
-		case tk_unary_operator: [[fallthrough]];
-		case tk_binary_operator:
-		{
-			using enum x69::symbol_type;
-
-			x69::symbol_type _type = sm_unary_op;
-			if (v.str() == "=")
-			{
-				_type = sm_assignment;
-			}
-			else if (v.str() == "+")
-			{
-				_type = sm_binary_op;
-			}
-			else if (v.str() == "-")
-			{
-				_type = sm_binary_op;
-			}
-			else if (v.str() == "+=")
-			{
-				_type = sm_binary_assignment_op;
-			}
-			else if (v.str() == "-=")
-			{
-				_type = sm_binary_assignment_op;
-			}
-			else if (v.str() == "++")
-			{
-				_type = sm_unary_assignment_op;
-			}
-			else if (v.str() == "--")
-			{
-				_type = sm_unary_assignment_op;
-			};
-
-			x69::symbol _symbol{ v, _type };
-			_statements.back().push_back(std::move(_symbol));
-		};
-			break;
-		case tk_eol:
-			_statements.push_back(x69::statement{});
-			break;
-		default:
-			break;
-		};
-		
 	};
 
 
+	x69::token_pattern _vardeclPattern{};
+	x69::token_pattern _assignmentPattern{};
+
+	{
+		using arg_t = x69::token_pattern::arguement;
+		_vardeclPattern.args_ =
+		{
+			{
+				.token = x69::token_type::tk_declaration
+			},
+			{
+				.token = x69::token_type::tk_symbol
+			},
+			{
+				.token = x69::token_type::tk_symbol
+			},
+			{
+				.token = std::nullopt,
+				.variadic = true
+			}
+		};
+		_assignmentPattern.args_ =
+		{
+			{
+				.token = x69::token_type::tk_assignment
+			},
+			{
+				.token = std::nullopt,
+				.variadic = true
+			}
+		};
+	};
+
+
+
+	std::vector<jc::reference_ptr<x69::token_pattern>> _patterns
+	{
+		_vardeclPattern,
+		_assignmentPattern
+	};
+
+
+
+
+	x69::compiler_context _context{};
+
 	std::ofstream _ostr{ PROJECT_ROOT "/slime.x69" };
 	jc::formatted_ostream fout{ _ostr.rdbuf() };
+
+
+
+
+
+
+
+
+
+
+	/*
+
 
 	for (auto& v : _statements)
 	{
@@ -338,6 +390,7 @@ int main()
 
 
 	};
+	*/
 
 
 
