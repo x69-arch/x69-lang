@@ -82,12 +82,30 @@ namespace x69
 
 	struct token_pattern
 	{
+	public:
 		struct arguement
 		{
 			std::optional<token_type> token;
 			bool variadic = false;
 		};
 
+	private:
+		using container_type = std::vector<arguement>;
+
+	public:
+		using iterator = container_type::iterator;
+		using const_iterator = container_type::const_iterator;
+
+		iterator begin() noexcept { return this->args_.begin(); };
+		const_iterator begin() const noexcept { return this->args_.cbegin(); };
+		const_iterator cbegin() const noexcept { return this->args_.cbegin(); };
+		
+		iterator end() noexcept { return this->args_.end(); };
+		const_iterator end() const noexcept { return this->args_.cend(); };
+		const_iterator cend() const noexcept { return this->args_.cend(); };
+
+
+	
 		std::vector<arguement> args_;
 	};
 
@@ -131,55 +149,89 @@ namespace x69
 
 };
 
+extern inline jc::formatted_ostream cout{ std::cout };
+
 namespace x69
 {
 
-	constexpr auto find_pattern = [](const x69::statement& _st, const x69::token_pattern& _pattern)
-	{
-		auto _ptIter = _pattern.args_.begin();
-		auto _stIter = _st.begin();
+	// ... tk_symbol tk_assignment ... tk_eol
 
-		for (; _ptIter != _pattern.args_.end() && _stIter != _st.end(); ++_ptIter, ++_stIter)
+	using pattern_view = jc::ranges::iter_view<x69::token_pattern::const_iterator>;
+
+	pattern_view next_pattern_sequence(pattern_view _pattern)
+	{
+		auto _outBegin = _pattern.begin();
+		for (_outBegin; _outBegin != _pattern.end(); ++_outBegin)
 		{
-			if (_ptIter->token)
+			if (!_outBegin->variadic)
 			{
-				if (_ptIter->token.value() != _stIter->type())
-				{
-					return false;
-				};
-			}
-			else
-			{
-				if (_ptIter->variadic)
-				{
-					break;
-				};
+				break;
 			};
 		};
-		return true;
-	};
-	constexpr auto match_pattern = [](const x69::statement& _st, const x69::token_pattern& _pattern)
-	{
-		auto& _args = _pattern.args_;
-		auto _varargIter = std::ranges::find_if(_args, [](const auto& _arg) -> bool
+
+		auto _outEnd = _outBegin;
+		for (_outEnd; _outEnd != _pattern.end(); ++_outEnd)
+		{
+			if (_outEnd->variadic)
 			{
-				return _arg.variadic;
-			});
-
-		if (_varargIter == std::ranges::end(_args))
-		{
-			return std::ranges::end(_st);
+				break;
+			};
 		};
 
-		const auto _dist = std::distance(std::ranges::begin(_args), _varargIter);
-		if (_dist > _st.size())
-		{
-			return _st.end();
-		};
-		return std::next(_st.begin(), _dist);
+		return pattern_view{ _outBegin, _outEnd };
 	};
 
 
+	using statement_match = std::vector<x69::statement::const_iterator>;
+	using statement_view = jc::ranges::iter_view<x69::statement::const_iterator>;
+
+	constexpr auto find_pattern = [](const x69::statement& _st, const x69::token_pattern& _pattern)
+	{
+		const auto _patternView = pattern_view{ _pattern.begin(), _pattern.end() };
+		
+
+
+		statement_view _statement{ _st.begin(), _st.end() };
+	
+		// ... tk_symbol tk_assignment ... tk_eol
+
+		statement_match _matched{};
+
+		pattern_view _previousSeq = pattern_view{ _pattern.begin(), _pattern.end() };
+		pattern_view _sequence = next_pattern_sequence(_patternView);
+
+		while (_sequence.size() != 0)
+		{
+			auto it = _statement.begin();
+			for (auto& _seq : _sequence)
+			{
+
+				for (it; it != _statement.end(); ++it)
+				{
+
+					if (!_seq.token || (_seq.token.value() == it->type()))
+					{
+						_matched.push_back(it);
+						++it;
+						if (it == _st.end())
+						{
+							break;
+						};
+					}
+					else
+					{
+						return statement_match{};
+					};
+				};
+
+				
+			};
+
+			_sequence = next_pattern_sequence(pattern_view{ _sequence.end(), _pattern.end() });
+		};
+
+		return _matched;
+	};
 
 	auto parse_statement(const statement& _statement, const std::ranges::range auto& _patterns)
 	{
@@ -187,23 +239,17 @@ namespace x69
 
 		for (auto& pt : _patterns)
 		{
-			if (find_pattern(st, pt))
+			auto _matched = find_pattern(st, *pt);
+			if (!_matched.empty())
 			{
-				const auto _varargIter = match_pattern(st, *pt);
-				for (auto& a : jc::views::iter(st.cbegin(), _varargIter))
+				for (auto& a : _matched)
 				{
-					if (a.type() != x69::token_type::tk_eol)
+					if (a->type() != x69::token_type::tk_eol)
 					{
-						cout("{} ", a.str());
+						cout("{} ", a->str());
 					};
 				};
 				cout("\n");
-
-				if (_varargIter != st.end())
-				{
-					// process varaidic arguements
-
-				};
 			};
 		};
 
@@ -213,7 +259,6 @@ namespace x69
 
 int main()
 {
-	jc::formatted_ostream cout{ std::cout };
 
 	std::vector<x69::token> _tokens{};
 	{
@@ -277,14 +322,25 @@ int main()
 				.variadic = true
 			}
 		};
+
 		_assignmentPattern.args_ =
 		{
+			{
+				.token = std::nullopt,
+				.variadic = true,
+			},
+			{
+				.token = x69::token_type::tk_symbol
+			},
 			{
 				.token = x69::token_type::tk_assignment
 			},
 			{
 				.token = std::nullopt,
 				.variadic = true
+			},
+			{
+				.token = x69::token_type::tk_eol,
 			}
 		};
 	};
@@ -297,7 +353,10 @@ int main()
 		_assignmentPattern
 	};
 
-
+	for (auto& st : _statements)
+	{
+		parse_statement(st, _patterns);
+	};
 
 
 	x69::compiler_context _context{};

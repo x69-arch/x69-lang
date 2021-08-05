@@ -4,8 +4,8 @@ let int a;
 let int b = 5;
 
 /*
-let int b;
-b = 5;
+	let int b;
+	b = 5;
 */
 
 

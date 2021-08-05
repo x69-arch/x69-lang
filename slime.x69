@@ -1,5 +1,0 @@
-set r0, 2
-set r1, 5
-inc r1
-dec r1
-dec r1
